@@ -119,29 +119,11 @@ db::IrcChannelOptions Database::get_irc_channel_options_with_server_and_global_d
   return coptions;
 }
 
-void Database::store_muc_message(const std::string& owner, const Iid& iid,
-                                 Database::time_point date,
-                                 const std::string& body,
-                                 const std::string& nick)
-{
-  db::MucLogLine line(*Database::db);
 
-  line.uuid = Database::gen_uuid();
-  line.owner = owner;
-  line.ircChanName = iid.get_local();
-  line.ircServerName = iid.get_server();
-  line.date = date.time_since_epoch().count() / 1'000'000'000;
-  line.body = body;
-  line.nick = nick;
-
-  line.update();
-}
-
-std::vector<db::MucLogLine> Database::get_muc_logs(const std::string& owner, const std::string& chan_name, const std::string& server,
+std::vector<db::MucLogLine> Database::get_muc_logs(const std::string& chan_name, const std::string& server,
                                                    int limit, const std::string& start, const std::string& end)
 {
   auto request = litesql::select<db::MucLogLine>(*Database::db,
-                                              db::MucLogLine::Owner == owner &&
                                               db::MucLogLine::IrcChanName == chan_name &&
                                               db::MucLogLine::IrcServerName == server);
   request.orderBy(db::MucLogLine::Id, false);

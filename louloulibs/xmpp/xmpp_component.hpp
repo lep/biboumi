@@ -28,6 +28,8 @@
 #define PING_NS          "urn:xmpp:ping"
 #define DELAY_NS         "urn:xmpp:delay"
 #define MAM_NS           "urn:xmpp:mam:1"
+#define MAM_NS0           "urn:xmpp:mam:0"
+
 #define FORWARD_NS       "urn:xmpp:forward:0"
 #define CLIENT_NS        "jabber:client"
 #define DATAFORM_NS      "jabber:x:data"

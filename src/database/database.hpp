@@ -48,10 +48,8 @@ public:
   static db::IrcChannelOptions get_irc_channel_options_with_server_and_global_default(const std::string& owner,
                                                                                       const std::string& server,
                                                                                       const std::string& channel);
-  static std::vector<db::MucLogLine> get_muc_logs(const std::string& owner, const std::string& chan_name, const std::string& server,
+  static std::vector<db::MucLogLine> get_muc_logs(const std::string& chan_name, const std::string& server,
                                                   int limit=-1, const std::string& before="", const std::string& after="");
-  static void store_muc_message(const std::string& owner, const Iid& iid,
-                                time_point date, const std::string& body, const std::string& nick);
 
   static void close();
   static void open(const std::string& filename, const std::string& db_type="sqlite3");

@@ -244,12 +244,6 @@ void Bridge::send_channel_message(const Iid& iid, const std::string& body)
       else
         irc->send_channel_message(iid.get_local(), line);
 
-#ifdef USE_DATABASE
-      const auto xmpp_body = this->make_xmpp_body(line);
-      if (this->record_history)
-        Database::store_muc_message(this->get_bare_jid(), iid, std::chrono::system_clock::now(),
-                                    std::get<0>(xmpp_body), irc->get_own_nick());
-#endif
       for (const auto& resource: this->resources_in_chan[iid.to_tuple()])
         this->xmpp.send_muc_message(std::to_string(iid), irc->get_own_nick(),
                                     this->make_xmpp_body(line), this->user_jid + "/" + resource);
@@ -746,12 +740,6 @@ void Bridge::send_message(const Iid& iid, const std::string& nick, const std::st
   const auto encoding = in_encoding_for(*this, iid);
   if (muc)
     {
-#ifdef USE_DATABASE
-      const auto xmpp_body = this->make_xmpp_body(body, encoding);
-      if (!nick.empty() && this->record_history)
-        Database::store_muc_message(this->get_bare_jid(), iid, std::chrono::system_clock::now(),
-                                    std::get<0>(xmpp_body), nick);
-#endif
       for (const auto& resource: this->resources_in_chan[iid.to_tuple()])
         {
           this->xmpp.send_muc_message(std::to_string(iid), nick,
@@ -892,23 +880,6 @@ void Bridge::send_topic(const std::string& hostname, const std::string& chan_nam
 
 void Bridge::send_room_history(const std::string& hostname, const std::string& chan_name)
 {
-  for (const auto& resource: this->resources_in_chan[ChannelKey{chan_name, hostname}])
-    this->send_room_history(hostname, chan_name, resource);
-}
-
-void Bridge::send_room_history(const std::string& hostname, const std::string& chan_name, const std::string& resource)
-{
-#ifdef USE_DATABASE
-  const auto coptions = Database::get_irc_channel_options_with_server_and_global_default(this->user_jid, hostname, chan_name);
-  const auto lines = Database::get_muc_logs(this->user_jid, chan_name, hostname, coptions.maxHistoryLength.value());
-  for (const auto& line: lines)
-    {
-      const auto seconds = line.date.value().timeStamp();
-      this->xmpp.send_history_message(chan_name + utils::empty_if_fixed_server("%" + hostname), line.nick.value(),
-                                      line.body.value(),
-                                      this->user_jid + "/" + resource, seconds);
-    }
-#endif
 }
 
 std::string Bridge::get_own_nick(const Iid& iid)
@@ -1130,7 +1101,6 @@ void Bridge::generate_channel_join_for_resource(const Iid& iid, const std::strin
   this->send_user_join(iid.get_server(), iid.get_encoded_local(),
                        self, self->get_most_significant_mode(irc->get_sorted_user_modes()),
                        true, resource);
-  this->send_room_history(iid.get_server(), iid.get_local(), resource);
   this->send_topic(iid.get_server(), iid.get_encoded_local(), channel->topic, channel->topic_author, resource);
 }
 

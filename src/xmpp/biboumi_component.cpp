@@ -29,6 +29,8 @@
 #include <database/database.hpp>
 #include <bridge/result_set_management.hpp>
 
+#include <algorithm>
+
 using namespace std::string_literals;
 
 static std::set<std::string> kickable_errors{
@@ -377,7 +379,7 @@ void BiboumiComponent::handle_iq(const Stanza& stanza)
           stanza_error.disable();
         }
 #ifdef USE_DATABASE
-      else if ((query = stanza.get_child("query", MAM_NS)))
+      else if ((query = stanza.get_child("query", MAM_NS0)))
         {
           if (this->handle_mam_request(stanza))
             stanza_error.disable();
@@ -415,6 +417,27 @@ void BiboumiComponent::handle_iq(const Stanza& stanza)
                   this->send_irc_channel_muc_traffic_info(id, from, to_str);
                   stanza_error.disable();
                 }
+			  else if (node.empty()){
+				  Stanza iq("iq");
+				  iq["type"] = "result";
+				  iq["id"] = id;
+				  iq["from"] = to_str;
+				  iq["to"] = from;
+
+				  XmlNode query("query");
+				  query["xmlns"] = DISCO_INFO_NS;
+
+				  XmlNode feature("feature");
+				  feature["var"] = "urn:xmpp:mam:0";
+				  //query["node"] = MUC_TRAFFIC_NS;
+				  // We drop all “special” traffic (like xhtml-im, chatstates, etc), so
+				  // don’t include any <feature/>
+				  query.add_child(std::move(feature));
+				  iq.add_child(std::move(query));
+
+				  this->send_stanza(iq);
+                  stanza_error.disable();
+			  }
             }
         }
       else if ((query = stanza.get_child("query", VERSION_NS)))
@@ -565,7 +588,7 @@ bool BiboumiComponent::handle_mam_request(const Stanza& stanza)
     Jid from(stanza.get_tag("from"));
     Jid to(stanza.get_tag("to"));
 
-    const XmlNode* query = stanza.get_child("query", MAM_NS);
+    const XmlNode* query = stanza.get_child("query", MAM_NS0);
     std::string query_id;
     if (query)
       query_id = query->get_tag("queryid");
@@ -575,6 +598,7 @@ bool BiboumiComponent::handle_mam_request(const Stanza& stanza)
       {
         std::string start;
         std::string end;
+		std::string maxq;
         const XmlNode* x = query->get_child("x", DATAFORM_NS);
         if (x)
           {
@@ -594,14 +618,66 @@ bool BiboumiComponent::handle_mam_request(const Stanza& stanza)
                     if (value)
                       end = value->get_inner();
                   }
+				else if(field->get_tag("var") == "max"){
+					value = field->get_child("value", DATAFORM_NS);
+					if(value)
+						maxq = value->get_inner();
+				}
               }
           }
-        const auto lines = Database::get_muc_logs(from.bare(), iid.get_local(), iid.get_server(), -1, start, end);
-        for (const db::MucLogLine& line: lines)
+		size_t max_messsages = maxq.empty() ? 20 : std::min(20, std::stoi(maxq));
+        const auto lines = Database::get_muc_logs(iid.get_local(), iid.get_server(), max_messsages+1, start, end);
+
+		size_t count = 0;
+		std::string first_id = "";
+		std::string last_id;
+		bool complete = true;
+        for (auto it = lines.rbegin(); it != lines.rend(); it++)
         {
+		  if(count++ >= max_messsages){
+			  complete = false;
+			  break;
+		  }
+		  const db::MucLogLine &line = *it;
+		  last_id = line.uuid;
+		  if(first_id.empty())
+			  first_id = line.uuid;
           if (!line.nick.value().empty())
-            this->send_archived_message(line, to.full(), from.full(), query_id);
+        	this->send_archived_message(line, to.full(), from.full(), query_id);
+
         }
+
+		XmlNode finiq("message");
+		finiq["queryid"] = query_id;
+		finiq["from"] = to.full();
+		finiq["to"] = from.full();
+
+		XmlNode fin("fin");
+		fin["xmlns"] = MAM_NS0;;
+		fin["queryid"] = query_id;
+		fin["complete"] = std::to_string(complete);
+
+		XmlNode set("set");
+		set["xmlns"] = "http://jabber.org/protocol/rsm";
+
+		XmlNode first("first");
+		first["index"] = "0";
+		first.set_inner(first_id);
+		XmlNode last("last");
+		last.set_inner(last_id);
+		XmlNode countN("count");
+		countN.set_inner(std::to_string(count));
+
+
+		set.add_child(std::move(first));
+		set.add_child(std::move(last));
+		set.add_child(std::move(countN));
+		fin.add_child(std::move(set));
+		finiq.add_child(std::move(fin));
+
+		this->send_stanza(finiq);
+
+
         this->send_iq_result_full_jid(id, from.full(), to.full());
         return true;
       }
@@ -616,7 +692,7 @@ void BiboumiComponent::send_archived_message(const db::MucLogLine& log_line, con
     message["to"] = to;
 
     XmlNode result("result");
-    result["xmlns"] = MAM_NS;
+    result["xmlns"] = MAM_NS0;
     if (!queryid.empty())
       result["queryid"] = queryid;
     result["id"] = log_line.uuid.value();

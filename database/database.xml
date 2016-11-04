@@ -56,7 +56,6 @@
         <field name="uuid" type="string" length="36" />
         <!-- The bare JID of the user for which we stored the line. It's
         the JID associated with the Bridge -->
-        <field name="owner" type="string" length="4096" />
         <!-- The room IID -->
         <field name="ircChanName" type="string" length="4096" />
         <field name="ircServerName" type="string" length="4096" />
